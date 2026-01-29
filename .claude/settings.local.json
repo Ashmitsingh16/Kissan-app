@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill //F //PID 2148)",
+      "Bash(taskkill //F //PID 29420)",
+      "Bash(npm start)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(start http://localhost:3000)",
+      "Bash(taskkill:*)",
+      "Bash(powershell.exe -Command \"Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c cd C:\\\\Users\\\\KIIT\\\\kisan-app\\\\backend && npm start'' -WindowStyle Hidden\")",
+      "Bash(powershell.exe -Command \"Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c cd C:\\\\Users\\\\KIIT\\\\kisan-app\\\\frontend && npm run dev'' -WindowStyle Hidden\")",
+      "Bash(powershell.exe -Command \"Start-Process ''http://localhost:3000''\")",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 5000,3000 -ErrorAction SilentlyContinue | Select-Object LocalPort, State\")",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(start http://localhost:3001)",
+      "Bash(cmd.exe /c start http://localhost:3001)",
+      "Bash(curl:*)",
+      "Bash(cmd.exe /c start http://localhost:3001/dashboard/weather)",
+      "Bash(npx kill-port:*)",
+      "Bash(npm install:*)",
+      "Bash(dir:*)",
+      "Bash(pnpm dlx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest init --yes)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm ls:*)",
+      "Bash(findstr:*)",
+      "Bash(cmd //c \"taskkill /F /PID 16200\")",
+      "Bash(ls:*)",
+      "Bash(cmd //c \"taskkill /F /PID 7704 && taskkill /F /PID 23272\")"
+    ]
+  }
+}

@@ -1,0 +1,158 @@
+================================================================================
+                           KISAN APP - PROJECT OVERVIEW
+================================================================================
+
+WHAT IS THIS PROJECT?
+---------------------
+Kisan App is a web platform that connects FARMERS with GOVERNMENT SERVICES for:
+- Agricultural crop management
+- Selling crop straw (instead of burning it - eco-friendly!)
+- Getting AI-powered farming recommendations
+- Weather-based crop guidance
+
+--------------------------------------------------------------------------------
+
+TECHNOLOGIES & LANGUAGES USED
+--------------------------------------------------------------------------------
+
+FRONTEND:
+  - Next.js 14        (React-based framework)
+  - React 18          (UI library)
+  - Tailwind CSS      (Styling)
+  - JavaScript        (Programming language)
+  - Axios             (API calls)
+
+BACKEND:
+  - Node.js           (Runtime)
+  - Express.js        (Web framework)
+  - MongoDB           (Database)
+  - Mongoose          (Database ODM)
+  - JWT               (Authentication tokens)
+  - bcryptjs          (Password encryption)
+
+EXTERNAL SERVICES:
+  - Google Gemini AI  (Crop predictions & recommendations)
+  - Google Maps API   (Location & route optimization)
+  - OpenWeatherMap    (Weather forecasts)
+  - Twilio            (SMS notifications)
+  - Nodemailer        (Email notifications)
+
+--------------------------------------------------------------------------------
+
+HOW THE APP WORKS
+--------------------------------------------------------------------------------
+
+FOR FARMERS:
+  1. Register with Aadhar/PAN verification
+  2. Add farms (location, soil type, irrigation)
+  3. Add crops to farms (track from sowing to harvest)
+  4. Get AI predictions for harvest dates
+  5. Book appointments to sell straw
+  6. Receive SMS/Email updates on appointment status
+  7. Get paid directly to bank account
+
+FOR GOVERNMENT OFFICERS:
+  1. View all farmer appointments
+  2. Approve/Reject straw collection requests
+  3. Dispatch trucks with optimized routes
+  4. Record actual collection data
+  5. Process farmer payments
+  6. View analytics & statistics dashboard
+
+--------------------------------------------------------------------------------
+
+KEY FEATURES
+--------------------------------------------------------------------------------
+
+  [AI-POWERED]
+  - Harvest date predictions
+  - Crop recommendations based on farm conditions
+  - Weather-specific farming advice
+  - Straw selling market analysis
+
+  [WEATHER]
+  - Current weather by location
+  - 5-day forecast
+  - Crop-specific weather alerts
+  - Frost/heat warnings
+
+  [NOTIFICATIONS]
+  - SMS alerts via Twilio
+  - Email notifications via Gmail
+  - In-app notification center
+
+  [MAPS & ROUTING]
+  - Farm location geocoding
+  - Truck route optimization
+  - Distance calculations
+
+--------------------------------------------------------------------------------
+
+PROJECT STRUCTURE
+--------------------------------------------------------------------------------
+
+kisan-app/
+  |
+  +-- backend/
+  |     +-- config/       (Database, AI, Weather, Maps, Notifications setup)
+  |     +-- models/       (User, Farm, Appointment, CollectionRoute)
+  |     +-- routes/       (API endpoints for all features)
+  |     +-- middleware/   (JWT auth & role-based access)
+  |     +-- server.js     (Main entry point)
+  |
+  +-- frontend/
+        +-- src/pages/    (21 pages - auth, dashboard, farms, appointments)
+        +-- src/components/  (Reusable UI components)
+        +-- src/context/  (Auth & Theme state management)
+        +-- src/utils/    (API client with Axios)
+
+--------------------------------------------------------------------------------
+
+USER ROLES
+--------------------------------------------------------------------------------
+
+  FARMER          - Manages farms, crops, books straw selling appointments
+  GOVERNMENT      - Manages appointments, dispatch, payments, analytics
+  ADMIN           - Full system access
+
+--------------------------------------------------------------------------------
+
+APPOINTMENT FLOW
+--------------------------------------------------------------------------------
+
+  PENDING --> APPROVED --> TRUCK_DISPATCHED --> COLLECTED --> COMPLETED
+                 |
+                 +--> REJECTED (if issues found)
+
+--------------------------------------------------------------------------------
+
+DATABASE MODELS
+--------------------------------------------------------------------------------
+
+  USER        : Personal info, Aadhar/PAN, bank details, role
+  FARM        : Location, area, soil type, irrigation, crops array
+  APPOINTMENT : Straw details, status, truck info, payment tracking
+  ROUTE       : Multiple stops, truck details, distance/fuel stats
+
+--------------------------------------------------------------------------------
+
+PORTS & URLS
+--------------------------------------------------------------------------------
+
+  Backend runs on  : http://localhost:5000
+  Frontend runs on : http://localhost:3000
+
+--------------------------------------------------------------------------------
+
+ENVIRONMENT VARIABLES NEEDED (.env)
+--------------------------------------------------------------------------------
+
+  MONGODB_URI, JWT_SECRET, PORT
+  GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, OPENWEATHER_API_KEY
+  TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+  SUPPORT_EMAIL, EMAIL_PASSWORD
+  DEMO_MODE (true/false)
+
+================================================================================
+                              END OF OVERVIEW
+================================================================================
