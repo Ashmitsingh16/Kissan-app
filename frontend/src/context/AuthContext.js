@@ -86,6 +86,37 @@ export const AuthProvider = ({ children }) => {
     setUser(newUser);
   };
 
+  const forgotPassword = async (email) => {
+    try {
+      const response = await authAPI.forgotPassword({ email });
+      toast.success(response.data.message || 'Reset link sent! Check your email.');
+      return { success: true };
+    } catch (error) {
+      const message = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Something went wrong';
+      toast.error(message);
+      return { success: false, error: message };
+    }
+  };
+
+  const resetPassword = async (token, password) => {
+    try {
+      const response = await authAPI.resetPassword(token, { password });
+      const { token: authToken, ...userData } = response.data;
+      if (authToken) {
+        localStorage.setItem('token', authToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+      }
+      toast.success('Password reset successful!');
+      router.push('/dashboard');
+      return { success: true };
+    } catch (error) {
+      const message = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Reset link is invalid or expired';
+      toast.error(message);
+      return { success: false, error: message };
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -94,6 +125,8 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       updateUser,
+      forgotPassword,
+      resetPassword,
       isAuthenticated: !!user
     }}>
       {children}
