@@ -3,11 +3,13 @@ const router = express.Router();
 const { protect, farmerOnly } = require('../middleware/auth');
 const { predictHarvestDate, getStrawSellingAdvice, getCropRecommendations } = require('../config/gemini');
 const Farm = require('../models/Farm');
+const { aiLimiter } = require('../middleware/rateLimit');
+const harvestDate = require('../utils/harvestDate');
 
 // @route   POST /api/ai/predict-harvest
 // @desc    Predict harvest date for a crop
 // @access  Private (Farmers only)
-router.post('/predict-harvest', protect, farmerOnly, async (req, res) => {
+router.post('/predict-harvest', protect, farmerOnly, aiLimiter, async (req, res) => {
   try {
     const { farmId, cropId } = req.body;
 
@@ -37,10 +39,11 @@ router.post('/predict-harvest', protect, farmerOnly, async (req, res) => {
     const prediction = await predictHarvestDate(cropData);
 
     // Update crop with predicted harvest date
-    if (prediction.expectedHarvestDate) {
-      crop.expectedHarvestDate = new Date(prediction.expectedHarvestDate);
-      await farm.save();
-    }
+    let validatedDate;
+    try { validatedDate = harvestDate(prediction.expectedHarvestDate, crop.sowingDate); }
+    catch { return res.status(502).json({ message: 'AI returned an unsupported harvest date. Please retry.' }); }
+    crop.expectedHarvestDate = validatedDate;
+    await farm.save();
 
     res.json({
       success: true,
@@ -53,14 +56,14 @@ router.post('/predict-harvest', protect, farmerOnly, async (req, res) => {
     });
   } catch (error) {
     console.error('AI Prediction Error:', error);
-    res.status(500).json({ message: 'Failed to get prediction', error: error.message });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Failed to get prediction' });
   }
 });
 
 // @route   POST /api/ai/straw-advice
 // @desc    Get advice for straw selling
 // @access  Private (Farmers only)
-router.post('/straw-advice', protect, farmerOnly, async (req, res) => {
+router.post('/straw-advice', protect, farmerOnly, aiLimiter, async (req, res) => {
   try {
     const { cropType, quantity, quantityUnit, farmId } = req.body;
 
@@ -84,14 +87,14 @@ router.post('/straw-advice', protect, farmerOnly, async (req, res) => {
     });
   } catch (error) {
     console.error('AI Advice Error:', error);
-    res.status(500).json({ message: 'Failed to get advice', error: error.message });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Failed to get advice' });
   }
 });
 
 // @route   POST /api/ai/crop-recommendations
 // @desc    Get crop recommendations for a farm
 // @access  Private (Farmers only)
-router.post('/crop-recommendations', protect, farmerOnly, async (req, res) => {
+router.post('/crop-recommendations', protect, farmerOnly, aiLimiter, async (req, res) => {
   try {
     const { farmId } = req.body;
 
@@ -117,7 +120,7 @@ router.post('/crop-recommendations', protect, farmerOnly, async (req, res) => {
     });
   } catch (error) {
     console.error('AI Recommendations Error:', error);
-    res.status(500).json({ message: 'Failed to get recommendations', error: error.message });
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Failed to get recommendations' });
   }
 });
 

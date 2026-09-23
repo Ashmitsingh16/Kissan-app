@@ -29,8 +29,7 @@ const emailTransporter = nodemailer.createTransport({
 // Send SMS via Twilio
 async function sendSMS(phoneNumber, message) {
   if (!twilioClient) {
-    console.log('SMS (mock):', { to: phoneNumber, message });
-    return { success: true, mock: true };
+    return { success: false, error: 'SMS service is not configured' };
   }
 
   try {

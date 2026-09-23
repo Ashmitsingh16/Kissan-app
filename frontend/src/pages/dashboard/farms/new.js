@@ -180,7 +180,8 @@ export default function NewFarm() {
         totalArea: parseFloat(formData.totalArea),
         location: {
           ...formData.location,
-          coordinates: formData.location.coordinates?.latitude
+          pincode: formData.location.pincode || undefined,
+          coordinates: Number.isFinite(formData.location.coordinates?.latitude) && Number.isFinite(formData.location.coordinates?.longitude)
             ? formData.location.coordinates
             : undefined
         },

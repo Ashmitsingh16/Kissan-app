@@ -4,6 +4,13 @@ const { body, validationResult } = require('express-validator');
 const Farm = require('../models/Farm');
 const { protect, farmerOnly } = require('../middleware/auth');
 
+// Ownership and database operators must never come from request fields.
+const editableFields = ['farmName', 'location', 'totalArea', 'areaUnit', 'soilType', 'irrigationType', 'crops'];
+const farmInput = (body) => Object.fromEntries(editableFields
+  .filter(key => Object.prototype.hasOwnProperty.call(body, key) &&
+    !(['soilType', 'irrigationType'].includes(key) && body[key] === ''))
+  .map(key => [key, body[key]]));
+
 // Indian states list
 const indianStates = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -32,13 +39,14 @@ router.post('/', protect, farmerOnly, [
     }
 
     const farm = await Farm.create({
-      farmer: req.user._id,
-      ...req.body
+      ...farmInput(req.body),
+      farmer: req.user._id
     });
 
     res.status(201).json(farm);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -50,7 +58,8 @@ router.get('/', protect, farmerOnly, async (req, res) => {
     const farms = await Farm.find({ farmer: req.user._id, isActive: true });
     res.json(farms);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -74,7 +83,8 @@ router.get('/:id', protect, farmerOnly, async (req, res) => {
 
     res.json(farm);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -89,15 +99,16 @@ router.put('/:id', protect, farmerOnly, async (req, res) => {
       return res.status(404).json({ message: 'Farm not found' });
     }
 
-    const updatedFarm = await Farm.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: Date.now() },
+    const updatedFarm = await Farm.findOneAndUpdate(
+      { _id: req.params.id, farmer: req.user._id },
+      { $set: { ...farmInput(req.body), updatedAt: Date.now() } },
       { new: true, runValidators: true }
     );
 
     res.json(updatedFarm);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -127,7 +138,8 @@ router.post('/:id/crops', protect, farmerOnly, [
 
     res.status(201).json(farm);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -153,7 +165,8 @@ router.put('/:farmId/crops/:cropId', protect, farmerOnly, async (req, res) => {
 
     res.json(farm);
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -173,7 +186,8 @@ router.delete('/:id', protect, farmerOnly, async (req, res) => {
 
     res.json({ message: 'Farm removed successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid farm or crop details' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

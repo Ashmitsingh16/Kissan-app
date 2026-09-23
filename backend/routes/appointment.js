@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { notificationLimiter } = require('../middleware/rateLimit');
 const { body, validationResult } = require('express-validator');
 const Appointment = require('../models/Appointment');
 const Farm = require('../models/Farm');
@@ -7,11 +8,14 @@ const User = require('../models/User');
 const CollectionRoute = require('../models/CollectionRoute');
 const { protect, farmerOnly, governmentOnly } = require('../middleware/auth');
 const { sendNotification } = require('../config/notifications');
+const positiveNumber = value => typeof value === 'number' && Number.isFinite(value) && value > 0;
+const conflict = res => res.status(409).json({ message: 'Appointment changed or this action is not allowed in its current state. Reload and try again.' });
+
 
 // @route   POST /api/appointments
 // @desc    Book a new appointment for straw selling
 // @access  Private (Farmers only)
-router.post('/', protect, farmerOnly, [
+router.post('/', protect, farmerOnly, notificationLimiter, [
   body('farm').notEmpty().withMessage('Farm is required'),
   body('strawDetails.cropType').notEmpty().withMessage('Crop type is required'),
   body('strawDetails.quantity').isFloat({ min: 1 }).withMessage('Quantity must be greater than 0'),
@@ -26,7 +30,7 @@ router.post('/', protect, farmerOnly, [
     }
 
     // Verify farm belongs to user
-    const farm = await Farm.findOne({ _id: req.body.farm, farmer: req.user._id });
+    const farm = await Farm.findOne({ _id: req.body.farm, farmer: req.user._id, isActive: true });
     if (!farm) {
       return res.status(404).json({ message: 'Farm not found' });
     }
@@ -54,7 +58,9 @@ router.post('/', protect, farmerOnly, [
       farm: req.body.farm,
       appointmentType: 'straw_selling',
       strawDetails: {
-        ...req.body.strawDetails,
+        cropType: req.body.strawDetails.cropType,
+        quantity: req.body.strawDetails.quantity,
+        quantityUnit: req.body.strawDetails.quantityUnit,
         estimatedPrice
       },
       preferredDate: req.body.preferredDate,
@@ -85,6 +91,8 @@ router.post('/', protect, farmerOnly, [
 
     res.status(201).json(appointment);
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -99,6 +107,8 @@ router.get('/', protect, farmerOnly, async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(appointments);
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -138,6 +148,8 @@ router.get('/government/all', protect, governmentOnly, async (req, res) => {
 
     res.json(filteredAppointments);
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -160,6 +172,8 @@ router.get('/government/notifications', protect, governmentOnly, async (req, res
       appointments: unreadAppointments
     });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -185,6 +199,8 @@ router.put('/government/mark-read', protect, governmentOnly, async (req, res) =>
 
     res.json({ message: 'Marked as read' });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -199,7 +215,12 @@ router.get('/government/stats', protect, governmentOnly, async (req, res) => {
         $group: {
           _id: '$status',
           count: { $sum: 1 },
-          totalQuantity: { $sum: '$strawDetails.quantity' },
+          totalQuantity: { $sum: { $multiply: ['$strawDetails.quantity', { $switch: {
+            branches: [
+              { case: { $eq: ['$strawDetails.quantityUnit', 'kg'] }, then: 0.01 },
+              { case: { $eq: ['$strawDetails.quantityUnit', 'ton'] }, then: 10 }
+            ], default: 1
+          } }] } },
           totalAmount: { $sum: '$strawDetails.estimatedPrice' }
         }
       }
@@ -229,7 +250,12 @@ router.get('/government/stats', protect, governmentOnly, async (req, res) => {
         $group: {
           _id: '$farmData.location.state',
           count: { $sum: 1 },
-          totalQuantity: { $sum: '$strawDetails.quantity' }
+          totalQuantity: { $sum: { $multiply: ['$strawDetails.quantity', { $switch: {
+            branches: [
+              { case: { $eq: ['$strawDetails.quantityUnit', 'kg'] }, then: 0.01 },
+              { case: { $eq: ['$strawDetails.quantityUnit', 'ton'] }, then: 10 }
+            ], default: 1
+          } }] } }
         }
       },
       { $sort: { count: -1 } }
@@ -243,6 +269,8 @@ router.get('/government/stats', protect, governmentOnly, async (req, res) => {
       stateWise
     });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -262,6 +290,8 @@ router.put('/government/:id/verify', protect, governmentOnly, async (req, res) =
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
+    if (!['pending', 'approved'].includes(appointment.status)) return conflict(res);
+
     appointment.verification = {
       isVerified: true,
       verifiedBy: req.user._id,
@@ -278,6 +308,8 @@ router.put('/government/:id/verify', protect, governmentOnly, async (req, res) =
       appointment
     });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -285,7 +317,7 @@ router.put('/government/:id/verify', protect, governmentOnly, async (req, res) =
 // @route   PUT /api/appointments/government/:id/dispatch-truck
 // @desc    Dispatch truck for collection
 // @access  Private (Government only)
-router.put('/government/:id/dispatch-truck', protect, governmentOnly, async (req, res) => {
+router.put('/government/:id/dispatch-truck', protect, governmentOnly, notificationLimiter, async (req, res) => {
   try {
     const { truckId, vehicleNumber, driverName, driverPhone, estimatedArrival } = req.body;
 
@@ -295,6 +327,7 @@ router.put('/government/:id/dispatch-truck', protect, governmentOnly, async (req
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
+    if (appointment.status !== 'verified') return conflict(res);
     if (!appointment.verification?.isVerified) {
       return res.status(400).json({ message: 'Appointment must be verified first' });
     }
@@ -340,6 +373,8 @@ router.put('/government/:id/dispatch-truck', protect, governmentOnly, async (req
       appointment
     });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -347,15 +382,21 @@ router.put('/government/:id/dispatch-truck', protect, governmentOnly, async (req
 // @route   PUT /api/appointments/government/:id/collect
 // @desc    Mark straw as collected
 // @access  Private (Government only)
-router.put('/government/:id/collect', protect, governmentOnly, async (req, res) => {
+router.put('/government/:id/collect', protect, governmentOnly, notificationLimiter, async (req, res) => {
   try {
     const { actualQuantity, qualityGrade, weighbridgeReading, collectedBy } = req.body;
+    if (!positiveNumber(actualQuantity) || !['A', 'B', 'C'].includes(qualityGrade) ||
+        (weighbridgeReading !== undefined && !positiveNumber(weighbridgeReading))) {
+      return res.status(400).json({ message: 'Quantity and supplied weighbridge reading must be positive numbers; select grade A, B or C' });
+    }
 
     const appointment = await Appointment.findById(req.params.id);
 
     if (!appointment) {
       return res.status(404).json({ message: 'Appointment not found' });
     }
+
+    if (appointment.status !== 'truck_dispatched' || !appointment.verification?.isVerified) return conflict(res);
 
     // Calculate final payment based on actual quantity and quality
     const pricePerQuintal = qualityGrade === 'A' ? 220 : qualityGrade === 'B' ? 200 : 180;
@@ -365,7 +406,10 @@ router.put('/government/:id/collect', protect, governmentOnly, async (req, res) 
     } else if (appointment.strawDetails.quantityUnit === 'ton') {
       finalQuantityInQuintals = actualQuantity * 10;
     }
-    const finalPayment = Math.round(finalQuantityInQuintals * pricePerQuintal);
+    const finalPayment = Math.round(finalQuantityInQuintals * pricePerQuintal * 100) / 100;
+    if (!positiveNumber(finalPayment) || finalPayment > Number.MAX_SAFE_INTEGER / 100) {
+      return res.status(400).json({ message: 'Calculated payment is outside the supported range' });
+    }
 
     appointment.strawDetails.actualQuantity = actualQuantity;
     appointment.strawDetails.qualityGrade = qualityGrade;
@@ -407,6 +451,8 @@ router.put('/government/:id/collect', protect, governmentOnly, async (req, res) 
       finalPayment
     });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -424,17 +470,21 @@ router.put('/government/:id/status', protect, governmentOnly, async (req, res) =
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
-    appointment.status = status || appointment.status;
-    appointment.remarks = remarks || appointment.remarks;
+    const allowed = {
+      pending: ['approved', 'rejected'],
+      approved: ['rejected'],
+      verified: ['rejected']
+    };
+    if (!allowed[appointment.status]?.includes(status)) return conflict(res);
+    if (paymentAmount !== undefined && !positiveNumber(paymentAmount)) {
+      return res.status(400).json({ message: 'Payment amount must be a positive number' });
+    }
+    appointment.status = status;
+    if (typeof remarks === 'string') appointment.remarks = remarks;
     appointment.assignedOfficer = req.user._id;
     appointment.isRead = true;
-
     if (status === 'approved') {
-      appointment.paymentAmount = paymentAmount || appointment.strawDetails.estimatedPrice;
-    }
-
-    if (status === 'completed') {
-      appointment.paymentStatus = 'processing';
+      appointment.paymentAmount = paymentAmount ?? appointment.strawDetails.estimatedPrice;
     }
 
     appointment.notifications.push({
@@ -446,6 +496,8 @@ router.put('/government/:id/status', protect, governmentOnly, async (req, res) =
 
     res.json(appointment);
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -453,9 +505,13 @@ router.put('/government/:id/status', protect, governmentOnly, async (req, res) =
 // @route   PUT /api/appointments/government/:id/payment
 // @desc    Mark payment as completed
 // @access  Private (Government only)
-router.put('/government/:id/payment', protect, governmentOnly, async (req, res) => {
+router.put('/government/:id/payment', protect, governmentOnly, notificationLimiter, async (req, res) => {
   try {
     const { transactionId, paymentAmount } = req.body;
+    if (typeof transactionId !== 'string' || !transactionId.trim() || transactionId.length > 200 ||
+        (paymentAmount !== undefined && !positiveNumber(paymentAmount))) {
+      return res.status(400).json({ message: 'A transaction reference and a positive payment amount are required' });
+    }
 
     const appointment = await Appointment.findById(req.params.id);
 
@@ -463,19 +519,20 @@ router.put('/government/:id/payment', protect, governmentOnly, async (req, res) 
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
-    if (appointment.status !== 'collected' && appointment.status !== 'completed') {
-      return res.status(400).json({ message: 'Straw must be collected first' });
+    if (appointment.status !== 'collected' || appointment.paymentStatus === 'completed') return conflict(res);
+    if (!positiveNumber(appointment.paymentAmount) ||
+        (paymentAmount !== undefined && Math.abs(paymentAmount - appointment.paymentAmount) > 0.001)) {
+      return res.status(400).json({ message: 'Payment must match the amount calculated at collection' });
     }
 
     appointment.paymentStatus = 'completed';
-    appointment.paymentAmount = paymentAmount || appointment.paymentAmount;
     appointment.paymentDate = new Date();
-    appointment.transactionId = transactionId;
+    appointment.transactionId = transactionId.trim();
     appointment.status = 'completed';
 
     appointment.notifications.push({
       type: 'payment_completed',
-      message: `Payment of Rs ${paymentAmount} completed. Transaction ID: ${transactionId}`
+      message: `Payment of Rs ${appointment.paymentAmount} completed. Transaction ID: ${transactionId}`
     });
 
     await appointment.save();
@@ -487,7 +544,7 @@ router.put('/government/:id/payment', protect, governmentOnly, async (req, res) 
         farmerName: farmer.name,
         email: farmer.email,
         phone: farmer.phone,
-        amount: paymentAmount || appointment.paymentAmount,
+        amount: appointment.paymentAmount,
         transactionId: transactionId || 'N/A',
         paymentMethod: 'Bank Transfer',
         date: new Date().toLocaleDateString('en-IN')
@@ -498,6 +555,8 @@ router.put('/government/:id/payment', protect, governmentOnly, async (req, res) 
 
     res.json({ message: 'Payment marked as completed', appointment });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -544,7 +603,12 @@ router.get('/government/pending-by-location', protect, governmentOnly, async (re
           },
           appointments: { $push: '$$ROOT' },
           count: { $sum: 1 },
-          totalQuantity: { $sum: '$strawDetails.quantity' }
+          totalQuantity: { $sum: { $multiply: ['$strawDetails.quantity', { $switch: {
+            branches: [
+              { case: { $eq: ['$strawDetails.quantityUnit', 'kg'] }, then: 0.01 },
+              { case: { $eq: ['$strawDetails.quantityUnit', 'ton'] }, then: 10 }
+            ], default: 1
+          } }] } }
         }
       },
       { $sort: { count: -1 } }
@@ -552,6 +616,8 @@ router.get('/government/pending-by-location', protect, governmentOnly, async (re
 
     res.json(appointments);
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -582,6 +648,8 @@ router.get('/:id', protect, async (req, res) => {
 
     res.json(appointment);
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -609,6 +677,8 @@ router.put('/:id/cancel', protect, farmerOnly, async (req, res) => {
 
     res.json({ message: 'Appointment cancelled successfully', appointment });
   } catch (error) {
+    if (error.name === 'VersionError') return conflict(res);
+    if (error.name === 'ValidationError' || error.name === 'CastError') return res.status(400).json({ message: 'Invalid appointment data' });
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

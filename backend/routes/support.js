@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { contactIpLimiter, notificationLimiter } = require('../middleware/rateLimit');
 const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const { protect } = require('../middleware/auth');
@@ -57,7 +58,7 @@ const createTransporter = () => {
 // @route   POST /api/support/ticket
 // @desc    Create a new support ticket
 // @access  Private
-router.post('/ticket', protect, [
+router.post('/ticket', protect, notificationLimiter, [
   body('subject').trim().notEmpty().withMessage('Subject is required'),
   body('message').trim().notEmpty().withMessage('Message is required'),
   body('category').optional().isIn(['general', 'payment', 'appointment', 'technical', 'other'])
@@ -158,7 +159,7 @@ router.get('/tickets/:id', protect, async (req, res) => {
 // @route   POST /api/support/tickets/:id/reply
 // @desc    Add reply to a ticket
 // @access  Private
-router.post('/tickets/:id/reply', protect, [
+router.post('/tickets/:id/reply', protect, notificationLimiter, [
   body('message').trim().notEmpty().withMessage('Message is required')
 ], async (req, res) => {
   try {
@@ -221,7 +222,7 @@ router.post('/tickets/:id/reply', protect, [
 // @route   POST /api/support/quick-contact
 // @desc    Quick contact form (without account)
 // @access  Public
-router.post('/quick-contact', [
+router.post('/quick-contact', contactIpLimiter, [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Valid email is required'),
   body('phone').matches(/^[6-9]\d{9}$/).withMessage('Valid phone number is required'),

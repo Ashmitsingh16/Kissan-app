@@ -1,4 +1,6 @@
 const express = require('express');
+const mongoose = require('mongoose');
+function routeConflict(message) { return Object.assign(new Error(message), { status: 409 }); }
 const router = express.Router();
 const { protect, governmentOnly, farmerOnly } = require('../middleware/auth');
 const { geocodeAddress, getDistance, getOptimizedRoute, calculateFuelCost, haversineDistance } = require('../config/maps');
@@ -97,7 +99,8 @@ router.get('/government/pending-farms', protect, governmentOnly, async (req, res
     const { state, district, date } = req.query;
 
     let query = {
-      status: { $in: ['pending', 'approved', 'verified'] }
+      status: { $in: ['pending', 'approved', 'verified'] },
+      'truckDetails.routeId': null
     };
 
     if (date) {
@@ -204,7 +207,7 @@ router.post('/government/optimize-route', protect, governmentOnly, async (req, r
 
     // Prepare waypoints
     const waypoints = [];
-    const appointmentMap = {};
+    const waypointAppointments = [];
 
     for (const apt of appointments) {
       if (apt.farm?.location?.coordinates?.latitude) {
@@ -213,7 +216,7 @@ router.post('/government/optimize-route', protect, governmentOnly, async (req, r
           longitude: apt.farm.location.coordinates.longitude
         };
         waypoints.push(coords);
-        appointmentMap[`${coords.latitude},${coords.longitude}`] = apt;
+        waypointAppointments.push(apt);
       }
     }
 
@@ -261,7 +264,7 @@ router.post('/government/optimize-route', protect, governmentOnly, async (req, r
         totalDistanceText: `${totalDistance.toFixed(1)} km`,
         totalDuration: totalDistance * 3, // Estimate: 20 km/h average = 3 min/km
         totalDurationText: `${Math.round(totalDistance * 3)} min`,
-        optimizedOrder: orderedWaypoints.map((wp, idx) => idx),
+        optimizedOrder: orderedWaypoints.map(wp => waypoints.indexOf(wp)),
         legs: orderedWaypoints.map((wp, idx) => ({
           legIndex: idx,
           coordinates: wp
@@ -293,7 +296,7 @@ router.post('/government/optimize-route', protect, governmentOnly, async (req, r
       stops: optimizedRoute.optimizedOrder ?
         optimizedRoute.optimizedOrder.map((orderIdx, stopNum) => {
           const wp = waypoints[orderIdx];
-          const apt = appointmentMap[`${wp.latitude},${wp.longitude}`];
+          const apt = waypointAppointments[orderIdx];
           return {
             stopNumber: stopNum + 1,
             appointmentId: apt?._id,
@@ -305,7 +308,7 @@ router.post('/government/optimize-route', protect, governmentOnly, async (req, r
           };
         }) :
         waypoints.map((wp, idx) => {
-          const apt = appointmentMap[`${wp.latitude},${wp.longitude}`];
+          const apt = waypointAppointments[idx];
           return {
             stopNumber: idx + 1,
             appointmentId: apt?._id,
@@ -328,88 +331,46 @@ router.post('/government/optimize-route', protect, governmentOnly, async (req, r
 // @access  Private (Government only)
 router.post('/government/create-collection-route', protect, governmentOnly, async (req, res) => {
   try {
-    const {
-      routeDate,
-      appointmentIds,
-      truckDetails,
-      depotState
-    } = req.body;
-
-    // Get depot
-    const depot = DEPOT_LOCATIONS[depotState] || DEPOT_LOCATIONS['default'];
-
-    // Get appointments
-    const appointments = await Appointment.find({
-      _id: { $in: appointmentIds }
-    }).populate('farm', 'farmName location');
-
-    if (appointments.length === 0) {
-      return res.status(400).json({ message: 'No valid appointments found' });
+    const { routeDate, appointmentIds, truckDetails, depotState } = req.body;
+    if (!Array.isArray(appointmentIds) || !appointmentIds.length || appointmentIds.length > 100 ||
+        appointmentIds.some(id => !mongoose.isObjectIdOrHexString(id)) ||
+        new Set(appointmentIds).size !== appointmentIds.length || !routeDate || !Number.isFinite(Date.parse(routeDate))) {
+      return res.status(400).json({ message: 'Supply a valid route date and 1–100 distinct appointment IDs' });
     }
-
-    // Determine state and district from first appointment
-    const firstFarm = appointments[0].farm;
-    const state = firstFarm?.location?.state;
-    const district = firstFarm?.location?.district;
-
-    // Prepare stops
-    const stops = appointments.map((apt, idx) => ({
-      appointment: apt._id,
-      farm: apt.farm._id,
-      order: idx + 1,
-      status: 'pending',
-      coordinates: apt.farm?.location?.coordinates
-    }));
-
-    // Calculate total quantity
-    const totalQuantity = appointments.reduce((sum, apt) => {
-      let qty = apt.strawDetails?.quantity || 0;
-      if (apt.strawDetails?.quantityUnit === 'kg') qty = qty / 100;
-      if (apt.strawDetails?.quantityUnit === 'ton') qty = qty * 10;
-      return sum + qty;
-    }, 0);
-
-    // Create collection route
-    const collectionRoute = await CollectionRoute.create({
-      routeDate: new Date(routeDate),
-      state,
-      district,
-      stops,
-      truck: truckDetails,
-      routeStats: {
-        totalStops: stops.length,
-        totalQuantity: Math.round(totalQuantity * 10) / 10
-      },
-      startPoint: {
-        name: depot.name,
-        coordinates: { latitude: depot.latitude, longitude: depot.longitude }
-      },
-      endPoint: {
-        name: depot.name,
-        coordinates: { latitude: depot.latitude, longitude: depot.longitude }
-      },
-      assignedOfficer: req.user._id,
-      status: 'planned'
-    });
-
-    // Update appointments with route reference
-    await Appointment.updateMany(
-      { _id: { $in: appointmentIds } },
-      {
-        $set: {
-          'truckDetails.routeId': collectionRoute._id,
-          status: 'approved'
-        }
+    const depot = DEPOT_LOCATIONS[depotState] || DEPOT_LOCATIONS.default;
+    const collectionRoute = await mongoose.connection.transaction(async session => {
+      const appointments = await Appointment.find({ _id: { $in: appointmentIds } })
+        .populate('farm', 'farmName location').session(session);
+      if (appointments.length !== appointmentIds.length || appointments.some(apt =>
+          !['pending', 'approved', 'verified'].includes(apt.status) || apt.truckDetails?.routeId || !apt.farm)) {
+        throw routeConflict('All appointments must be awaiting collection and not already assigned to a route');
       }
-    );
-
-    res.status(201).json({
-      success: true,
-      message: 'Collection route created',
-      route: collectionRoute
+      // Keep the selected order instead of relying on database result order.
+      const ordered = appointmentIds.map(id => appointments.find(apt => String(apt._id) === id));
+      const totalQuantity = ordered.reduce((sum, apt) => sum + apt.strawDetails.quantity *
+        (apt.strawDetails.quantityUnit === 'kg' ? 0.01 : apt.strawDetails.quantityUnit === 'ton' ? 10 : 1), 0);
+      const route = new CollectionRoute({
+        routeDate: new Date(routeDate), state: ordered[0].farm.location.state,
+        district: ordered[0].farm.location.district,
+        stops: ordered.map((apt, idx) => ({ appointment: apt._id, farm: apt.farm._id, order: idx + 1,
+          status: 'pending', coordinates: apt.farm.location.coordinates })),
+        truck: truckDetails, routeStats: { totalStops: ordered.length, totalQuantity },
+        startPoint: { name: depot.name, coordinates: { latitude: depot.latitude, longitude: depot.longitude } },
+        endPoint: { name: depot.name, coordinates: { latitude: depot.latitude, longitude: depot.longitude } },
+        assignedOfficer: req.user._id, status: 'planned'
+      });
+      await route.save({ session });
+      for (const appointment of ordered) {
+        appointment.truckDetails.routeId = route._id;
+        // Planning a route must not approve, verify or reopen an appointment.
+        await appointment.save({ session });
+      }
+      return route;
     });
+    res.status(201).json({ success: true, message: 'Collection route created', route: collectionRoute });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to create route', error: error.message });
+    res.status(error.status || (error.name === 'ValidationError' || error.name === 'CastError' ? 400 : 500))
+      .json({ message: error.status ? error.message : 'Failed to create route' });
   }
 });
 
@@ -479,34 +440,34 @@ router.get('/government/routes/:id', protect, governmentOnly, async (req, res) =
 // @access  Private (Government only)
 router.put('/government/routes/:id/start', protect, governmentOnly, async (req, res) => {
   try {
-    const route = await CollectionRoute.findById(req.params.id);
-
-    if (!route) {
-      return res.status(404).json({ message: 'Route not found' });
-    }
-
-    route.status = 'in_progress';
-    route.startTime = new Date();
-    await route.save();
-
-    // Update all appointments to truck_dispatched
-    const appointmentIds = route.stops.map(s => s.appointment);
-    await Appointment.updateMany(
-      { _id: { $in: appointmentIds } },
-      {
-        $set: {
-          status: 'truck_dispatched',
-          'truckDetails.dispatchTime': new Date(),
-          'truckDetails.vehicleNumber': route.truck?.vehicleNumber,
-          'truckDetails.driverName': route.truck?.driverName,
-          'truckDetails.driverPhone': route.truck?.driverPhone
-        }
+    const route = await mongoose.connection.transaction(async session => {
+      const current = await CollectionRoute.findById(req.params.id).session(session);
+      if (!current) throw Object.assign(new Error('Route not found'), { status: 404 });
+      if (current.status !== 'planned') throw routeConflict('Only a planned route can be started');
+      const ids = current.stops.map(stop => stop.appointment);
+      const appointments = await Appointment.find({ _id: { $in: ids } }).session(session);
+      if (!ids.length || appointments.length !== ids.length || appointments.some(apt =>
+          apt.status !== 'verified' || !apt.verification?.isVerified ||
+          String(apt.truckDetails?.routeId) !== String(current._id))) {
+        throw routeConflict('Every appointment on the route must be verified before dispatch');
       }
-    );
-
+      for (const appointment of appointments) {
+        appointment.status = 'truck_dispatched';
+        Object.assign(appointment.truckDetails, {
+          dispatchTime: new Date(), vehicleNumber: current.truck?.vehicleNumber,
+          driverName: current.truck?.driverName, driverPhone: current.truck?.driverPhone
+        });
+        await appointment.save({ session });
+      }
+      current.status = 'in_progress';
+      current.startTime = new Date();
+      await current.save({ session });
+      return current;
+    });
     res.json({ success: true, message: 'Route started', route });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to start route', error: error.message });
+    res.status(error.status || (error.name === 'CastError' ? 400 : 500))
+      .json({ message: error.status ? error.message : 'Failed to start route' });
   }
 });
 
@@ -514,7 +475,7 @@ router.put('/government/routes/:id/start', protect, governmentOnly, async (req, 
 // @desc    Get Maps API key for frontend
 // @access  Private
 router.get('/api-key', protect, (req, res) => {
-  res.json({ apiKey: process.env.GOOGLE_MAPS_API_KEY });
+  res.json({ apiKey: process.env.GOOGLE_MAPS_BROWSER_KEY || '' });
 });
 
 module.exports = router;

@@ -10,7 +10,6 @@ const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
 export default function Register() {
   const router = useRouter();
-  const { role } = router.query;
   const { register, user, loading: authLoading } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
 
@@ -29,12 +28,6 @@ export default function Register() {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (role && (role === 'farmer' || role === 'government')) {
-      setFormData(prev => ({ ...prev, userType: role }));
-    }
-  }, [role]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -140,35 +133,9 @@ export default function Register() {
           </p>
         </div>
 
-        {/* Role Toggle */}
-        <div className="flex justify-center mb-6 sm:mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-1 shadow-md flex w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, userType: 'farmer' }))}
-              className={`flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 rounded-lg transition-colors ${
-                formData.userType === 'farmer'
-                  ? 'bg-primary-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              <FaTractor />
-              <span>Farmer</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormData(prev => ({ ...prev, userType: 'government' }))}
-              className={`flex-1 sm:flex-none flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 rounded-lg transition-colors ${
-                formData.userType === 'government'
-                  ? 'bg-secondary-500 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              <FaUserTie />
-              <span>Government</span>
-            </button>
-          </div>
-        </div>
+        <p className="text-center text-gray-600 dark:text-gray-400 mb-6">
+          Government officers: contact your administrator for account access.
+        </p>
 
         {/* Registration Form */}
         <div className="card">

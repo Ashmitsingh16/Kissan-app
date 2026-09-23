@@ -5,14 +5,20 @@ const connectDB = require('./config/db');
 
 // Load env vars
 dotenv.config();
+require('./config/production')();
 
 // Connect to database
 connectDB();
 
 const app = express();
+require('./middleware/rateLimit').configureProxy(app);
 
 // Middleware
-app.use(cors());
+const origins = (process.env.CORS_ORIGIN || '').split(',').map(value => value.trim()).filter(Boolean);
+app.use(cors({ origin: (origin, done) => {
+  if (!origin || origins.includes(origin) || (!origins.length && process.env.NODE_ENV !== 'production')) return done(null, true);
+  done(Object.assign(new Error('Origin is not allowed'), { status: 403 }));
+} }));
 app.use(express.json());
 
 // Routes
@@ -34,7 +40,7 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!', error: err.message });
+  res.status(err.status || 500).json({ message: err.status ? err.message : 'Something went wrong!' });
 });
 
 const PORT = process.env.PORT || 5000;

@@ -63,6 +63,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  tokenVersion: { type: Number, default: 0 },
   resetPasswordToken: {
     type: String
   },
@@ -80,6 +81,7 @@ userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {
     return next();
   }
+  if (!this.isNew) this.tokenVersion = (this.tokenVersion || 0) + 1;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();

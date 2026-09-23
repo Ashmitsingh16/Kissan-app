@@ -101,14 +101,11 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = async (token, password) => {
     try {
       const response = await authAPI.resetPassword(token, { password });
-      const { token: authToken, ...userData } = response.data;
-      if (authToken) {
-        localStorage.setItem('token', authToken);
-        localStorage.setItem('user', JSON.stringify(userData));
-        setUser(userData);
-      }
-      toast.success('Password reset successful!');
-      router.push('/dashboard');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+      toast.success('Password reset successful! Please log in.');
+      router.push('/auth/login');
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.message || error.response?.data?.errors?.[0]?.msg || 'Reset link is invalid or expired';

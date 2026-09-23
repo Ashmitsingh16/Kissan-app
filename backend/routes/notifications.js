@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { notificationLimiter, notificationIpLimiter } = require('../middleware/rateLimit');
 const { protect, governmentOnly } = require('../middleware/auth');
 const { sendSMS, sendEmail, sendNotification, sendBulkSMS } = require('../config/notifications');
 const User = require('../models/User');
@@ -8,7 +9,7 @@ const Appointment = require('../models/Appointment');
 // @route   POST /api/notifications/send-sms
 // @desc    Send SMS to a single recipient
 // @access  Private (Government only)
-router.post('/send-sms', protect, governmentOnly, async (req, res) => {
+router.post('/send-sms', protect, governmentOnly, notificationIpLimiter, notificationLimiter, async (req, res) => {
   try {
     const { phone, message } = req.body;
 
@@ -26,7 +27,7 @@ router.post('/send-sms', protect, governmentOnly, async (req, res) => {
 // @route   POST /api/notifications/send-email
 // @desc    Send email to a single recipient
 // @access  Private (Government only)
-router.post('/send-email', protect, governmentOnly, async (req, res) => {
+router.post('/send-email', protect, governmentOnly, notificationIpLimiter, notificationLimiter, async (req, res) => {
   try {
     const { to, subject, content } = req.body;
 
@@ -34,6 +35,7 @@ router.post('/send-email', protect, governmentOnly, async (req, res) => {
       return res.status(400).json({ message: 'Recipient, subject, and content are required' });
     }
 
+    if (typeof to !== 'string' || to.split(',').length > 20) return res.status(400).json({ message: 'Send to at most 20 recipients' });
     const result = await sendEmail(to, subject, content);
     res.json(result);
   } catch (error) {
@@ -44,7 +46,7 @@ router.post('/send-email', protect, governmentOnly, async (req, res) => {
 // @route   POST /api/notifications/bulk-sms
 // @desc    Send SMS to multiple farmers
 // @access  Private (Government only)
-router.post('/bulk-sms', protect, governmentOnly, async (req, res) => {
+router.post('/bulk-sms', protect, governmentOnly, notificationIpLimiter, notificationLimiter, async (req, res) => {
   try {
     const { farmerIds, message, filterByState, filterByDistrict } = req.body;
 
@@ -91,6 +93,8 @@ router.post('/bulk-sms', protect, governmentOnly, async (req, res) => {
       return res.status(400).json({ message: 'No recipients found' });
     }
 
+    if (recipients.length > 20) return res.status(400).json({ message: 'Send to at most 20 recipients per batch' });
+
     const results = await sendBulkSMS(recipients, message);
 
     const successful = results.filter(r => r.success).length;
@@ -110,7 +114,7 @@ router.post('/bulk-sms', protect, governmentOnly, async (req, res) => {
 // @route   POST /api/notifications/appointment/:id
 // @desc    Send notification for appointment status change
 // @access  Private (Government only)
-router.post('/appointment/:id', protect, governmentOnly, async (req, res) => {
+router.post('/appointment/:id', protect, governmentOnly, notificationIpLimiter, notificationLimiter, async (req, res) => {
   try {
     const { notificationType } = req.body;
 
@@ -168,8 +172,8 @@ router.post('/appointment/:id', protect, governmentOnly, async (req, res) => {
 
 // @route   POST /api/notifications/weather-alert
 // @desc    Send weather alert to farmer
-// @access  Private
-router.post('/weather-alert', protect, async (req, res) => {
+// @access  Private (Government only)
+router.post('/weather-alert', protect, governmentOnly, notificationIpLimiter, notificationLimiter, async (req, res) => {
   try {
     const { farmerId, farmName, alertMessage, recommendation, temperature } = req.body;
 
@@ -216,7 +220,7 @@ router.get('/templates', protect, governmentOnly, (req, res) => {
 // @route   POST /api/notifications/test
 // @desc    Test notification setup
 // @access  Private (Government only)
-router.post('/test', protect, governmentOnly, async (req, res) => {
+router.post('/test', protect, governmentOnly, notificationIpLimiter, notificationLimiter, async (req, res) => {
   try {
     const { phone, email } = req.body;
 

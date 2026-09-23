@@ -26,13 +26,15 @@ const farmSchema = new mongoose.Schema({
       match: [/^\d{6}$/, 'Please enter a valid 6-digit pincode']
     },
     coordinates: {
-      latitude: Number,
-      longitude: Number
+      latitude: { type: Number, min: -90, max: 90, validate: Number.isFinite },
+      longitude: { type: Number, min: -180, max: 180, validate: Number.isFinite }
     }
   },
   totalArea: {
     type: Number,
-    required: [true, 'Total area is required']
+    required: [true, 'Total area is required'],
+    min: 0.1,
+    validate: Number.isFinite
   },
   areaUnit: {
     type: String,
@@ -55,8 +57,8 @@ const farmSchema = new mongoose.Schema({
     },
     expectedHarvestDate: Date,
     actualHarvestDate: Date,
-    areaUnderCrop: Number,
-    estimatedYield: Number,
+    areaUnderCrop: { type: Number, min: 0.1, validate: Number.isFinite },
+    estimatedYield: { type: Number, min: 0, validate: Number.isFinite },
     yieldUnit: {
       type: String,
       enum: ['kg', 'quintal', 'ton'],

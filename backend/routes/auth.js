@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const { authIpLimiter, authAccountLimiter, resetAccountLimiter } = require('../middleware/rateLimit');
+router.use(['/login', '/register', '/reset-password'], authIpLimiter);
+router.use('/forgot-password', authIpLimiter);
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
@@ -8,8 +11,8 @@ const { protect } = require('../middleware/auth');
 const { sendEmail } = require('../config/notifications');
 
 // Generate JWT Token
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateToken = (id, tokenVersion = 0) => {
+  return jwt.sign({ id, tokenVersion }, process.env.JWT_SECRET, {
     expiresIn: '30d'
   });
 };
@@ -35,10 +38,10 @@ const validateIdNumber = (value, { req }) => {
 };
 
 // @route   POST /api/auth/register
-// @desc    Register a new user (farmer or government)
+// @desc    Register a farmer (officer access is provisioned by an administrator)
 // @access  Public
 router.post('/register', [
-  body('userType').isIn(['farmer', 'government']).withMessage('Invalid user type'),
+  body('userType').equals('farmer').withMessage('Government accounts must be provisioned by an administrator'),
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('phone').custom((value) => {
     if (DEMO_MODE) return true;
@@ -52,7 +55,7 @@ router.post('/register', [
   body('email').isEmail().normalizeEmail().withMessage('Enter valid email'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('numberOfFarms').optional().isInt({ min: 0, max: 10 }).withMessage('Number of farms must be 0-10')
-], async (req, res) => {
+], authAccountLimiter, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -92,7 +95,7 @@ router.post('/register', [
         name: user.name,
         email: user.email,
         numberOfFarms: user.numberOfFarms,
-        token: generateToken(user._id)
+        token: generateToken(user._id, user.tokenVersion)
       });
     } else {
       res.status(400).json({ message: 'Invalid user data' });
@@ -109,7 +112,7 @@ router.post('/register', [
 router.post('/login', [
   body('email').isEmail().normalizeEmail().withMessage('Enter valid email'),
   body('password').notEmpty().withMessage('Password is required')
-], async (req, res) => {
+], authAccountLimiter, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -129,7 +132,7 @@ router.post('/login', [
         phone: user.phone,
         numberOfFarms: user.numberOfFarms,
         isVerified: user.isVerified,
-        token: generateToken(user._id)
+        token: generateToken(user._id, user.tokenVersion)
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
@@ -175,7 +178,7 @@ router.put('/profile', protect, async (req, res) => {
         name: updatedUser.name,
         email: updatedUser.email,
         phone: updatedUser.phone,
-        token: generateToken(updatedUser._id)
+        token: generateToken(updatedUser._id, updatedUser.tokenVersion)
       });
     } else {
       res.status(404).json({ message: 'User not found' });
@@ -234,7 +237,7 @@ router.put('/bank-details', protect, [
 // @access  Public
 router.post('/forgot-password', [
   body('email').isEmail().normalizeEmail().withMessage('Enter valid email')
-], async (req, res) => {
+], resetAccountLimiter, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -319,7 +322,7 @@ router.post('/reset-password/:token', [
 
     res.json({
       message: 'Password reset successful. You can now log in with your new password.',
-      token: generateToken(user._id)
+      token: generateToken(user._id, user.tokenVersion)
     });
   } catch (error) {
     console.error(error);

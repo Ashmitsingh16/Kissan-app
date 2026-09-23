@@ -31,7 +31,7 @@ const appointmentSchema = new mongoose.Schema({
       default: 'quintal'
     },
     estimatedPrice: Number,
-    actualQuantity: Number,
+    actualQuantity: { type: Number, min: 0 },
     qualityGrade: {
       type: String,
       enum: ['A', 'B', 'C'],
@@ -90,7 +90,7 @@ const appointmentSchema = new mongoose.Schema({
     enum: ['pending', 'processing', 'completed', 'failed'],
     default: 'pending'
   },
-  paymentAmount: Number,
+  paymentAmount: { type: Number, min: 0 },
   paymentDate: Date,
   transactionId: String,
   // Notification tracking
@@ -112,7 +112,7 @@ const appointmentSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { optimisticConcurrency: true });
 
 appointmentSchema.pre('save', function(next) {
   this.updatedAt = Date.now();

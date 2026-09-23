@@ -1,18 +1,19 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
+// REST keeps model selection configurable without depending on a retired SDK.
 async function generateContent(prompt) {
-  try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error('Gemini API Error:', error);
-    throw error;
-  }
+  const key = process.env.GEMINI_API_KEY;
+  const model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  if (!key) throw Object.assign(new Error('AI is not configured. Ask the administrator to configure Gemini.'), { status: 503 });
+  if (!/^[a-zA-Z0-9.-]+$/.test(model)) throw new Error('Invalid Gemini model setting');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } }),
+    signal: AbortSignal.timeout(30000)
+  });
+  if (!response.ok) throw Object.assign(new Error('AI provider is unavailable. Please retry later.'), { status: 502 });
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.filter(part => !part.thought).map(part => part.text || '').join('');
+  if (!text) throw Object.assign(new Error('AI returned no usable response.'), { status: 502 });
+  return text;
 }
 
 async function predictHarvestDate(cropData) {
@@ -65,7 +66,7 @@ Please provide your response in the following JSON format only (no markdown, no 
     return JSON.parse(cleanedResponse.trim());
   } catch (error) {
     console.error('Error parsing Gemini response:', error);
-    throw new Error('Failed to parse AI response');
+    throw Object.assign(new Error(error.status ? error.message : 'AI returned an invalid response. Please retry.'), { status: error.status || 502 });
   }
 }
 
@@ -110,7 +111,7 @@ Provide your response in the following JSON format only (no markdown, no code bl
     return JSON.parse(cleanedResponse.trim());
   } catch (error) {
     console.error('Error parsing Gemini response:', error);
-    throw new Error('Failed to parse AI response');
+    throw Object.assign(new Error(error.status ? error.message : 'AI returned an invalid response. Please retry.'), { status: error.status || 502 });
   }
 }
 
@@ -161,7 +162,7 @@ Provide your response in the following JSON format only (no markdown, no code bl
     return JSON.parse(cleanedResponse.trim());
   } catch (error) {
     console.error('Error parsing Gemini response:', error);
-    throw new Error('Failed to parse AI response');
+    throw Object.assign(new Error(error.status ? error.message : 'AI returned an invalid response. Please retry.'), { status: error.status || 502 });
   }
 }
 

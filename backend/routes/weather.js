@@ -128,6 +128,11 @@ router.get('/harvest-advisory/:farmId/:cropId', protect, async (req, res) => {
       return res.status(404).json({ message: 'Farm not found' });
     }
 
+    if (farm.farmer.toString() !== req.user._id.toString() &&
+        !(req.user.userType === 'government' && req.user.isVerified)) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
     const crop = farm.crops.id(req.params.cropId);
     if (!crop) {
       return res.status(404).json({ message: 'Crop not found' });
