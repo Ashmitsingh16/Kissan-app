@@ -7,3 +7,10 @@ build/
 
 .env.local
 *.tsbuildinfo
+
+# Private configuration and downloaded credentials
+.env.*
+!.env.example
+!.env.local.example
+client_secret*.json
+*password*.txt

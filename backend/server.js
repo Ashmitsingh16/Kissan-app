@@ -11,6 +11,7 @@ require('./config/production')();
 connectDB();
 
 const app = express();
+app.disable('x-powered-by');
 require('./middleware/rateLimit').configureProxy(app);
 
 // Middleware
@@ -33,9 +34,7 @@ app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/notifications', require('./routes/notifications'));
 
 // Health check route
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Kisan App API is running' });
-});
+app.get('/api/health', require('./middleware/health')());
 
 // Error handling middleware
 app.use((err, req, res, next) => {
