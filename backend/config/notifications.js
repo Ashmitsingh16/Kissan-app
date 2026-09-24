@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+const { createTransporter } = require('../utils/mailTransport');
 
 // Twilio configuration
 const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -18,13 +18,7 @@ if (twilioAccountSid && twilioAuthToken && twilioAccountSid !== 'your_twilio_acc
 }
 
 // Email transporter
-const emailTransporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.SUPPORT_EMAIL,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
+const emailTransporter = createTransporter();
 
 // Send SMS via Twilio
 async function sendSMS(phoneNumber, message) {

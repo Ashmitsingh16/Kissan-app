@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { contactIpLimiter, notificationLimiter } = require('../middleware/rateLimit');
-const nodemailer = require('nodemailer');
+const { createTransporter } = require('../utils/mailTransport');
 const { body, validationResult } = require('express-validator');
 const { protect } = require('../middleware/auth');
 const mongoose = require('mongoose');
@@ -43,17 +43,6 @@ const supportTicketSchema = new mongoose.Schema({
 });
 
 const SupportTicket = mongoose.model('SupportTicket', supportTicketSchema);
-
-// Email transporter configuration
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.SUPPORT_EMAIL,
-      pass: process.env.EMAIL_PASSWORD // App password for Gmail
-    }
-  });
-};
 
 // @route   POST /api/support/ticket
 // @desc    Create a new support ticket

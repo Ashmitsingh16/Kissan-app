@@ -9,7 +9,7 @@ Status: prepared for deployment, not certified for production. Passing local tes
 - Configure `NODE_ENV=production`, `DEMO_MODE=false`, `MONGODB_URI`, a unique `JWT_SECRET` (at least 32 characters), `FRONTEND_URL`, and `CORS_ORIGIN`.
 - `FRONTEND_URL` must be an HTTPS origin. `CORS_ORIGIN` is a comma-separated list of exact HTTPS frontend origins, without paths or wildcards.
 - Let the host assign `PORT`. Set `TRUST_PROXY_HOPS` to the exact trusted proxy count for your host; do not guess or enable unrestricted proxy trust.
-- Required service settings: SUPPORT_EMAIL, EMAIL_PASSWORD, GEMINI_API_KEY, OPENWEATHER_API_KEY, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_BROWSER_KEY.
+- Required service settings: SUPPORT_EMAIL, email credentials (EMAIL_PASSWORD for SMTP, or GMAIL_USER/GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN with EMAIL_PROVIDER=gmail-api), GEMINI_API_KEY, OPENWEATHER_API_KEY, GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_BROWSER_KEY.
 - From `backend`, run `npm run check:config` WITH the intended deployment variables. It prints presence/structural checks only and exits nonzero for missing required settings. It does not prove that credentials work.
 - Configure readiness monitoring against `/api/health`. It returns 200 only after a database ping succeeds, otherwise 503. Alert on repeated failures and server errors.
 
@@ -44,6 +44,10 @@ GitHub Actions runs tests and dependency audits on pushes and pull requests; Kis
 
 ## Kissan service setup
 
-Use a dedicated support sender and the mail provider's supported credential (for Gmail, a suitable app password where available; never the normal account password). Keep the server Maps key private and restrict the browser Maps key to intended website referrers and required APIs. Configure service quotas and billing alerts. Validate AI, weather and maps using real credentials before advertising these features. Twilio SMS is optional; configure all three Twilio settings if using it.
+Use a dedicated support sender. On Render Free, use EMAIL_PROVIDER=gmail-api and OAuth credentials because SMTP is blocked; SUPPORT_EMAIL remains the support inbox. On SMTP-capable hosting, a suitable Gmail app password may be used; never the normal account password. Keep the server Maps key private and restrict the browser Maps key to intended website referrers and required APIs. Configure service quotas and billing alerts. Validate AI, weather and maps using real credentials before advertising these features. Twilio SMS is optional; configure all three Twilio settings if using it.
 
 Government registration/approval must follow the existing administrator procedure. The software alone does not establish official government affiliation. Confirm that handling real identity and bank information fits your intended use and access controls.
+
+## Free setup
+
+See FREE-HOSTING.md and render.yaml for the optional free testing deployment. No resources are created merely by committing these files.
